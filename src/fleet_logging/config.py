@@ -52,7 +52,7 @@ class ConfigError(ValueError):
     declared type."""
 
 
-def _unwrap_optional(annotation):
+def _unwrap_optional(annotation: object) -> object:
     """`int | None` / `Optional[int]` -> `int`. Leaves everything else
     unchanged, including plain `list`/`list[str]`."""
     origin = typing.get_origin(annotation)
@@ -63,7 +63,7 @@ def _unwrap_optional(annotation):
     return annotation
 
 
-def _coerce(raw: str, annotation, field_name: str):
+def _coerce(raw: str, annotation: object, field_name: str) -> object:
     annotation = _unwrap_optional(annotation)
     try:
         if annotation is bool:

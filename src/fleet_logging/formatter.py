@@ -35,6 +35,7 @@ import os
 import sys
 import time
 import uuid
+from typing import TextIO
 
 from fleet_logging.redact import redact_fields
 
@@ -102,7 +103,7 @@ class _StreamHandler(logging.StreamHandler):
     stream.)
     """
 
-    def __init__(self, stream) -> None:
+    def __init__(self, stream: TextIO) -> None:
         super().__init__(stream=stream)
         self._get_stream = lambda: stream
 
@@ -116,7 +117,7 @@ class _StreamHandler(logging.StreamHandler):
 
 
 def configure_logging(
-    service: str, level: int = logging.INFO, stream=None
+    service: str, level: int = logging.INFO, stream: TextIO | None = None
 ) -> None:
     """Application entry-point only (see module docstring). Configures the
     root logger with a single stream handler using `JsonFormatter`.
@@ -173,7 +174,7 @@ def log_event(
     msg: str | None = None,
     *,
     service: str,
-    stream=None,
+    stream: TextIO | None = None,
     **fields,
 ) -> None:
     """Emit one canonical §18 JSON log line directly, with no `logging`
