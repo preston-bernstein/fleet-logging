@@ -10,6 +10,16 @@ import yaml
 from fleet_logging.config import ConfigError, load_config
 
 
+class TestConfigErrorReExport:
+    def test_config_error_importable_from_package_root(self):
+        """ConfigError is a raised part of load_config's public contract, so
+        it must be reachable via `from fleet_logging import ConfigError`,
+        not only via the `fleet_logging.config` submodule."""
+        import fleet_logging
+
+        assert fleet_logging.ConfigError is ConfigError
+
+
 @dataclass
 class SampleConfig:
     db_path: str = "data/db.sqlite"

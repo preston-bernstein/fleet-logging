@@ -15,6 +15,7 @@ repo rather than inside internal-infra itself.
 
 from __future__ import annotations
 
+from fleet_logging.config import ConfigError as ConfigError
 from fleet_logging.config import load_config as load_config
 from fleet_logging.formatter import JsonFormatter as JsonFormatter
 from fleet_logging.formatter import configure_logging as configure_logging
