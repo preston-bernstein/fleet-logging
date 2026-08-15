@@ -89,7 +89,7 @@ picks up an untested change:
 
 ```toml
 dependencies = [
-    "fleet-logging @ git+ssh://git@github.com/preston-bernstein/fleet-logging.git@<commit-sha>",
+    "fleet-logging @ git+ssh://git@github.com/preston-bernstein/fleet-logging.git@40b6e439d453d40e407baba5959631caf60f5e7b",
 ]
 ```
 
