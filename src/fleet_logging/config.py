@@ -1,30 +1,29 @@
 """`load_config(dataclass_type, path)` — a yaml + environment config loader.
 
-Extracted from, and a strict superset of, the two hand-rolled loaders this
-package replaces:
+Extracted from, and a strict superset of, two hand-rolled loaders this
+package replaces from separate internal services:
 
-- `internal-monitor-service/src/macro_monitor/config.py`: a flat dataclass, a
-  `config.yaml` overlay, **non-fatal** on a missing file (falls back to
-  dataclass defaults, logging a warning with the resolved path it tried),
-  **fatal** (re-raised, after logging) on a malformed file.
-- `internal-corpus-service/src/corpus_pipeline/config.py`: **fatal** (`FileNotFoundError`)
-  on a missing config file, loads secrets from a `.env` file via
-  `python-dotenv` rather than `config.yaml` (so a secret never lands in a
-  checked-in-adjacent yaml file).
+- One: a flat dataclass, a `config.yaml` overlay, **non-fatal** on a missing
+  file (falls back to dataclass defaults, logging a warning with the
+  resolved path it tried), **fatal** (re-raised, after logging) on a
+  malformed file.
+- The other: **fatal** (`FileNotFoundError`) on a missing config file, loads
+  secrets from a `.env` file via `python-dotenv` rather than `config.yaml`
+  (so a secret never lands in a checked-in-adjacent yaml file).
 
 Both missing-file behaviors are preserved here via `required=` — default
-`False` (internal-monitor-service's forgiving behavior) since that is the more
-conservative default for a brand-new consumer; a consumer that wants
-internal-corpus-service's "config file is mandatory" behavior passes `required=True`.
+`False` (the forgiving behavior) since that is the more conservative default
+for a brand-new consumer; a consumer that wants the other service's
+"config file is mandatory" behavior passes `required=True`.
 
-This module does **not** attempt to reproduce internal-corpus-service's `Config` shape
-itself (a raw dict plus a nested `Book` dataclass list plus computed
-`Path`-joining properties) — that is domain-specific to internal-corpus-service, not
+This module does **not** attempt to reproduce either source service's own
+config shape (one had a raw dict plus a nested dataclass list plus computed
+`Path`-joining properties) — that is domain-specific to that service, not
 part of the generic yaml+env+dataclass contract every consumer shares. What
-this module guarantees is that the *mechanism* internal-corpus-service relies on (secrets
-from `.env`/environment, never from the yaml file) and the *mechanism*
-internal-monitor-service relies on (yaml overlay onto dataclass defaults, non-fatal
-missing file) are both expressible without dropping behavior.
+this module guarantees is that the *mechanism* each original relied on
+(secrets from `.env`/environment, never from the yaml file; yaml overlay
+onto dataclass defaults with a non-fatal missing file) is expressible
+without dropping behavior.
 """
 
 from __future__ import annotations
@@ -106,13 +105,12 @@ def load_config(
 
     `required=False` (default): a missing yaml file is non-fatal — logs a
     `config.missing` warning with the resolved path and falls back to
-    defaults/env overrides only (internal-monitor-service's behavior). A yaml file
-    that exists but fails to parse is always fatal (logs `config.parse_failed`,
-    then re-raises) in either mode — a malformed config is a genuine operator
-    error, not something to silently default around.
+    defaults/env overrides only. A yaml file that exists but fails to parse
+    is always fatal (logs `config.parse_failed`, then re-raises) in either
+    mode — a malformed config is a genuine operator error, not something to
+    silently default around.
 
-    `required=True`: a missing yaml file raises `FileNotFoundError`
-    (internal-corpus-service's behavior).
+    `required=True`: a missing yaml file raises `FileNotFoundError`.
     """
     if not is_dataclass(dataclass_type):
         raise TypeError(f"{dataclass_type!r} is not a dataclass")
