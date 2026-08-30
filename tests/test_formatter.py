@@ -1,6 +1,6 @@
-"""Tests for `fleet_logging.formatter` — the §18 canonical JSON log line,
-both usage shapes (stdlib `logging` via `configure_logging`/`JsonFormatter`,
-and the direct `log_event` function)."""
+"""Tests for `fleet_logging.formatter` — the canonical JSON log line, both
+usage shapes (stdlib `logging` via `configure_logging`/`JsonFormatter`, and
+the direct `log_event` function)."""
 
 from __future__ import annotations
 
