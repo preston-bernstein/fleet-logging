@@ -1,16 +1,11 @@
-"""fleet-logging — the home-lab's shared implementation of home-infra's
-CONVENTIONS.md §18 fleet logging contract (canonical JSON log line, level
-vocabulary, redaction, correlation) plus a small `load_config` helper for the
-yaml+env config-loading pattern several repos hand-rolled separately.
+"""fleet-logging — a home lab's shared implementation of one canonical JSON
+logging contract (log line shape, level vocabulary, redaction, correlation)
+plus a small `load_config` helper for the yaml+env config-loading pattern
+several internal services hand-rolled separately.
 
-Built by extracting from three existing hand-written implementations —
-algo-corpus's `corpus_pipeline/logging_setup.py`, algo-macro-monitor's
-`macro_monitor/log.py`, and financial-pipeline's TypeScript
-`packages/adapter-utils/src/logger.ts` (Python only here; TS stays
-hand-rolled until someone ports it) — so this package is a strict superset
-of what those three actually do, not a fresh reinterpretation of the spec.
-See home-infra/docs/adr/0023 for the decision to house this as a dedicated
-repo rather than inside home-infra itself.
+Built by extracting from several existing hand-written implementations
+across those services, so this package is a strict superset of what they
+actually did, not a fresh reinterpretation of a spec written in a vacuum.
 """
 
 from __future__ import annotations
