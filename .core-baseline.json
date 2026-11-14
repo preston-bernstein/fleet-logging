@@ -1,0 +1,29 @@
+{
+ "_reason": "Existing over-limit functions accepted on 2026-11-13; new code must stay within the limits. Fix them when touched.",
+ "functions": {
+  "src/fleet_logging/config.py::_coerce": {
+   "nloc": 23,
+   "nd": 0,
+   "param": 3,
+   "ccn": 11,
+   "token": 154,
+   "length": 23
+  },
+  "src/fleet_logging/config.py::load_config": {
+   "nloc": 54,
+   "nd": 0,
+   "param": 6,
+   "ccn": 14,
+   "token": 345,
+   "length": 73
+  },
+  "src/fleet_logging/formatter.py::log_event": {
+   "nloc": 20,
+   "nd": 0,
+   "param": 6,
+   "ccn": 3,
+   "token": 125,
+   "length": 36
+  }
+ }
+}
