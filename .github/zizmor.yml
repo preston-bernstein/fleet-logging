@@ -1,0 +1,7 @@
+# Only these actions may appear in a workflow. Adding another one is a reviewed change to this file.
+rules:
+  forbidden-uses:
+    config:
+      allow:
+        - actions/checkout
+        - astral-sh/setup-uv
