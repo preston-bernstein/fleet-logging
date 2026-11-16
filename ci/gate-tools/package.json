@@ -1,0 +1,9 @@
+{
+  "name": "fleet-logging-gate-tools",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Pinned Node tools for the core gate. Not part of the library.",
+  "dependencies": {
+    "jscpd": "5.4.2"
+  }
+}

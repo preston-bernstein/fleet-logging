@@ -29,8 +29,10 @@ from fleet_logging import configure_logging
 
 configure_logging("my-service")
 log = logging.getLogger(__name__)
-log.info("batch complete", extra={"event": "batch.completed", "run_id": run_id,
-                                   "outcome": "ok", "items_processed": 42})
+log.info(
+    "batch complete",
+    extra={"event": "batch.completed", "run_id": run_id, "outcome": "ok", "items_processed": 42},
+)
 ```
 
 Use `log_event` in a short CLI run that has nothing to configure.
@@ -39,8 +41,9 @@ Use `log_event` in a short CLI run that has nothing to configure.
 from fleet_logging import log_event, new_run_id
 
 run_id = new_run_id()
-log_event("info", "batch.completed", service="my-service", run_id=run_id,
-          outcome="ok", items_processed=42)
+log_event(
+    "info", "batch.completed", service="my-service", run_id=run_id, outcome="ok", items_processed=42
+)
 ```
 
 Both write to stdout by default. Pass `stream=sys.stderr` to change that.
@@ -68,11 +71,13 @@ A secret under any other key name still reaches the log. Redaction here is a sec
 from dataclasses import dataclass, field
 from fleet_logging import load_config
 
+
 @dataclass
 class Config:
     db_path: str = "data/db.sqlite"
     review_min_days: int = 7
     symbol_universe: list[str] = field(default_factory=list)
+
 
 cfg = load_config(Config, "config.yaml")
 ```
@@ -107,9 +112,12 @@ Change the pin by hand when you want a newer commit. There is no package registr
 
 1. Run `git clone git@github.com:preston-bernstein/fleet-logging.git`.
 2. Run `cd fleet-logging`.
-3. Run `pip install -e ".[test,dev]"`.
-4. Run `pytest`.
-5. Run `ruff check .`.
+3. Run `uv sync`.
+4. Run `bash scripts/install-gate-tools.sh`, then run the `export PATH=...` line it prints.
+5. Run `git config core.hooksPath .githooks`.
+6. Run `bash scripts/py-validate.sh`.
+
+The hook and CI run four gates: `core-validate.sh`, `gha-validate.sh`, `py-validate.sh` and `writing-validate.sh`, all in `scripts/`.
 
 It needs Python 3.11 or newer. Dependencies are PyYAML and python-dotenv.
 

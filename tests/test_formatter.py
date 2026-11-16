@@ -143,9 +143,9 @@ class TestLogEvent:
         assert line["msg"] == "batch.completed"
 
     def test_redacts_deny_listed_fields(self, capsys):
-        log_event("info", "auth.attempt", service="svc", token="secret-value")
+        log_event("info", "auth.attempt", service="svc", token="secret-value")  # noqa: S106 -- fake value that tests redaction
         line = json.loads(capsys.readouterr().out.strip())
-        assert line["token"] == "[REDACTED]"
+        assert line["token"] == "[REDACTED]"  # noqa: S105 -- compares to the mask text
 
 
 class TestNewRunId:

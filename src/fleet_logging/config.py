@@ -32,7 +32,7 @@ import os
 import typing
 from dataclasses import MISSING, fields, is_dataclass
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import yaml
 from dotenv import load_dotenv
@@ -89,11 +89,11 @@ def _coerce(raw: str, annotation: object, field_name: str) -> object:
 
 def load_config(
     dataclass_type: type[T],
-    path: str | os.PathLike | None = None,
+    path: str | os.PathLike[str] | None = None,
     *,
     required: bool = False,
     env_prefix: str = "",
-    dotenv_path: str | os.PathLike | None = None,
+    dotenv_path: str | os.PathLike[str] | None = None,
     service: str = "fleet-logging",
 ) -> T:
     """Load a flat dataclass config from a yaml file overlaid with
@@ -117,7 +117,7 @@ def load_config(
 
     load_dotenv(dotenv_path) if dotenv_path else load_dotenv()
 
-    data: dict = {}
+    data: dict[str, Any] = {}
     if path is not None:
         cfg_path = Path(path)
         if cfg_path.exists():
@@ -147,14 +147,14 @@ def load_config(
             )
 
     type_hints = typing.get_type_hints(dataclass_type)
-    kwargs: dict = {}
+    kwargs: dict[str, Any] = {}
     for f in fields(dataclass_type):
         env_key = f"{env_prefix}{f.name}".upper()
         if env_key in os.environ:
             kwargs[f.name] = _coerce(os.environ[env_key], type_hints.get(f.name, str), f.name)
         elif f.name in data and data[f.name] is not None:
             kwargs[f.name] = data[f.name]
-        elif f.default is MISSING and f.default_factory is MISSING:  # type: ignore[misc]
+        elif f.default is MISSING and f.default_factory is MISSING:
             raise ConfigError(
                 f"field {f.name!r} has no default and was not present in "
                 f"{path!r} or the environment"
