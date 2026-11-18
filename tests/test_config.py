@@ -129,8 +129,8 @@ class TestCoercionCharacterization:
         monkeypatch.setenv("TAGS", "a, b,,c")
         monkeypatch.setenv("LABEL", "hello")
         cfg = load_config(TypedConfig)
-        # Today `int | None` (PEP 604) is not unwrapped, so the value stays a string.
-        assert cfg == TypedConfig(ratio=1.25, limit="9", tags=["a", "b", "c"], label="hello")
+        # `int | None` (PEP 604) is unwrapped on every supported Python.
+        assert cfg == TypedConfig(ratio=1.25, limit=9, tags=["a", "b", "c"], label="hello")
 
     def test_typing_optional_is_unwrapped(self, monkeypatch):
         monkeypatch.setenv("LIMIT", "9")

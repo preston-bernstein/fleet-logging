@@ -29,6 +29,7 @@ without dropping behavior.
 from __future__ import annotations
 
 import os
+import types
 import typing
 from collections.abc import Callable
 from dataclasses import MISSING, fields, is_dataclass
@@ -56,7 +57,7 @@ def _unwrap_optional(annotation: object) -> object:
     """`int | None` / `Optional[int]` -> `int`. Leaves everything else
     unchanged, including plain `list`/`list[str]`."""
     origin = typing.get_origin(annotation)
-    if origin is typing.Union:
+    if origin is typing.Union or origin is types.UnionType:
         args = [a for a in typing.get_args(annotation) if a is not type(None)]
         if len(args) == 1:
             return args[0]
