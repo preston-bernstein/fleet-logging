@@ -108,7 +108,8 @@ class _StreamHandler(logging.StreamHandler[TextIO]):
         return self._get_stream()
 
     @stream.setter
-    def stream(self, value: TextIO) -> None:  # pragma: no cover - base class assigns once
+    def stream(self, value: TextIO) -> None:
+        # StreamHandler.__init__ assigns the stream. Ignore it: `stream` reads the closure.
         pass
 
 
