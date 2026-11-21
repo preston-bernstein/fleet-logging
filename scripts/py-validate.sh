@@ -15,7 +15,10 @@ set -euo pipefail
 ROOT="${1:-.}"
 cd "$ROOT"
 
-fail() { echo "py-validate: $*" >&2; exit "${2:-1}"; }
+fail() {
+  echo "py-validate: $*" >&2
+  exit "${2:-1}"
+}
 need() { command -v "$1" >/dev/null 2>&1 || fail "missing tool: $1 (the gate never skips a step)" 127; }
 
 if [ ! -f pyproject.toml ]; then
@@ -52,8 +55,10 @@ run() { "${RUN[@]+"${RUN[@]}"}" "$@"; }
 run ruff check .
 run ruff format --check .
 if [ "$checker" = ty ]; then
+  # shellcheck disable=SC2086  # PY_TYPECHECK_PATHS is a space-separated list of paths
   run ty check $paths
 else
+  # shellcheck disable=SC2086  # PY_TYPECHECK_PATHS is a space-separated list of paths
   run mypy $paths
 fi
 run pytest -q
