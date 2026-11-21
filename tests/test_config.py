@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import json
+import typing
+from dataclasses import dataclass, field, make_dataclass
 
 import pytest
 import yaml
@@ -99,3 +101,101 @@ class TestNotADataclass:
 
         with pytest.raises(TypeError):
             load_config(NotADataclass)
+
+
+@dataclass
+class TypedConfig:
+    ratio: float = 0.5
+    limit: int | None = None
+    tags: list[str] = field(default_factory=list)
+    label: str = "x"
+    enabled: bool = False
+
+
+OptionalConfig = make_dataclass(
+    "OptionalConfig", [("limit", typing.Optional.__getitem__(int), field(default=None))]
+)
+
+
+@dataclass
+class RequiredConfig:
+    name: str
+
+
+class TestCoercionCharacterization:
+    def test_float_optional_int_list_and_str(self, monkeypatch):
+        monkeypatch.setenv("RATIO", "1.25")
+        monkeypatch.setenv("LIMIT", "9")
+        monkeypatch.setenv("TAGS", "a, b,,c")
+        monkeypatch.setenv("LABEL", "hello")
+        cfg = load_config(TypedConfig)
+        # `int | None` (PEP 604) is unwrapped on every supported Python.
+        assert cfg == TypedConfig(ratio=1.25, limit=9, tags=["a", "b", "c"], label="hello")
+
+    def test_typing_optional_is_unwrapped(self, monkeypatch):
+        monkeypatch.setenv("LIMIT", "9")
+        assert load_config(OptionalConfig).limit == 9
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [("YES", True), (" On ", True), ("1", True), ("off", False), ("0", False), ("No", False)],
+    )
+    def test_bool_spellings(self, monkeypatch, raw, expected):
+        monkeypatch.setenv("ENABLED", raw)
+        assert load_config(TypedConfig).enabled is expected
+
+    def test_bad_bool_message(self, monkeypatch):
+        monkeypatch.setenv("ENABLED", "maybe")
+        with pytest.raises(ConfigError) as err:
+            load_config(TypedConfig)
+        assert "env override for field 'enabled' ('maybe')" in str(err.value)
+        assert "'maybe' is not a recognized boolean" in str(err.value)
+
+    def test_bad_float_raises_config_error(self, monkeypatch):
+        monkeypatch.setenv("RATIO", "abc")
+        with pytest.raises(ConfigError, match="could not be coerced to <class 'float'>"):
+            load_config(TypedConfig)
+
+
+class TestFieldResolutionCharacterization:
+    def test_missing_required_field_names_path(self, tmp_path):
+        path = tmp_path / "c.yaml"
+        path.write_text("other: 1\n")
+        with pytest.raises(ConfigError, match="field 'name' has no default") as err:
+            load_config(RequiredConfig, path)
+        assert repr(path) in str(err.value)
+
+    def test_yaml_null_falls_back_to_default(self, tmp_path):
+        path = tmp_path / "c.yaml"
+        path.write_text("label: null\n")
+        assert load_config(TypedConfig, path).label == "x"
+
+    def test_empty_yaml_file_uses_defaults(self, tmp_path):
+        path = tmp_path / "c.yaml"
+        path.write_text("")
+        assert load_config(TypedConfig, path) == TypedConfig()
+
+    def test_required_error_message(self, tmp_path):
+        path = tmp_path / "gone.yaml"
+        with pytest.raises(FileNotFoundError, match="missing and required=True"):
+            load_config(TypedConfig, path, required=True)
+
+    def test_missing_file_warns_with_service(self, tmp_path, capsys):
+        path = tmp_path / "gone.yaml"
+        load_config(TypedConfig, path, service="svc")
+        line = json.loads(capsys.readouterr().out.strip())
+        assert line["event"] == "config.missing"
+        assert line["level"] == "warn"
+        assert line["service"] == "svc"
+        assert line["path"] == str(path.resolve())
+
+    def test_parse_failure_logs_then_raises(self, tmp_path, capsys):
+        path = tmp_path / "bad.yaml"
+        path.write_text("a: [1, 2\n")
+        with pytest.raises(yaml.YAMLError):
+            load_config(TypedConfig, path, service="svc")
+        line = json.loads(capsys.readouterr().out.strip())
+        assert line["event"] == "config.parse_failed"
+        assert line["level"] == "error"
+        assert line["err_type"] == "ParserError"
+        assert line["path"] == str(path.resolve())

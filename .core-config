@@ -1,0 +1,2 @@
+# Vendored, unchanged copies of the pack's own gate scripts. Their upkeep is the pack's job, not this repo's.
+CORE_EXCLUDE=*/scripts/*  # vendored gate scripts and styles from the stack packs

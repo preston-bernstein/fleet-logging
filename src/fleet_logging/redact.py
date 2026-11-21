@@ -12,6 +12,7 @@ common case, not every case.
 
 from __future__ import annotations
 
+from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 # The fleet-wide deny-list.
@@ -51,12 +52,12 @@ def _strip_query_string(value: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, "", parts.fragment))
 
 
-def redact_fields(fields: dict) -> dict:
+def redact_fields(fields: dict[str, Any]) -> dict[str, Any]:
     """Return a copy of `fields` with deny-listed keys replaced by
     `[REDACTED]` (case-insensitive key match) and any URL-shaped string
     value stripped of its query string.
     """
-    out: dict = {}
+    out: dict[str, Any] = {}
     for key, value in fields.items():
         if key.lower() in REDACT_KEYS:
             out[key] = _REDACTED

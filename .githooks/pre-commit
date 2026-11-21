@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Shared pre-commit hook. Run once per clone: git config core.hooksPath .githooks
+# It runs every gate that CI runs. A hook can be skipped, so CI is the backstop. Never use --no-verify.
+# Install the pinned tools first: bash scripts/install-gate-tools.sh
+set -euo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+export PATH="${GATE_TOOLS_DIR:-$HOME/.cache/fleet-logging-gate-tools}/bin:$PATH"
+cd "$ROOT"
+bash scripts/core-validate.sh
+bash scripts/gha-validate.sh
+bash scripts/py-validate.sh
+bash scripts/writing-validate.sh

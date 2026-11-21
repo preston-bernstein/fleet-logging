@@ -34,7 +34,8 @@ import os
 import sys
 import time
 import uuid
-from typing import TextIO
+from collections.abc import Callable
+from typing import Any, TextIO
 
 from fleet_logging.redact import redact_fields
 
@@ -45,9 +46,10 @@ SCHEMA_VERSION = 1
 # real LogRecord instead of hand-copied so a future Python version's added
 # attributes (e.g. `taskName` in 3.12) are picked up automatically rather
 # than leaking into every line as a spurious field.
-_STANDARD_ATTRS = frozenset(
-    vars(logging.LogRecord("", 0, "", 0, "", (), None)).keys()
-) | {"message", "asctime"}
+_STANDARD_ATTRS = frozenset(vars(logging.LogRecord("", 0, "", 0, "", (), None)).keys()) | {
+    "message",
+    "asctime",
+}
 
 
 class JsonFormatter(logging.Formatter):
@@ -65,7 +67,7 @@ class JsonFormatter(logging.Formatter):
         self.service = service
 
     def format(self, record: logging.LogRecord) -> str:
-        line: dict = {
+        line: dict[str, Any] = {
             "schema_version": SCHEMA_VERSION,
             "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(record.created)),
             "level": record.levelname,  # native Python spelling; pipeline canonicalizes
@@ -85,7 +87,7 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(line, default=str)
 
 
-class _StreamHandler(logging.StreamHandler):
+class _StreamHandler(logging.StreamHandler[TextIO]):
     """A StreamHandler that resolves its target stream at EMIT time rather
     than binding to whatever object it was when the handler was constructed.
 
@@ -99,14 +101,15 @@ class _StreamHandler(logging.StreamHandler):
 
     def __init__(self, stream: TextIO) -> None:
         super().__init__(stream=stream)
-        self._get_stream = lambda: stream
+        self._get_stream: Callable[[], TextIO] = lambda: stream
 
     @property
-    def stream(self):
+    def stream(self) -> TextIO:
         return self._get_stream()
 
     @stream.setter
-    def stream(self, value) -> None:  # pragma: no cover - base class assigns once
+    def stream(self, value: TextIO) -> None:
+        # StreamHandler.__init__ assigns the stream. Ignore it: `stream` reads the closure.
         pass
 
 
@@ -169,7 +172,7 @@ def log_event(
     *,
     service: str,
     stream: TextIO | None = None,
-    **fields,
+    **fields: object,
 ) -> None:
     """Emit one canonical JSON log line directly, with no `logging` module
     configuration required — for a package with no long-lived process to

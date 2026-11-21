@@ -1,105 +1,76 @@
 # fleet-logging
 
-fleet-logging is a shared Python library for a personal home lab's fleet of
-internal services. It implements one canonical JSON structured-logging
-format so each service imports a single implementation instead of
-hand-writing its own JSON formatter and drifting out of sync — which is
-exactly what happened before this package existed: several internal
-Python services independently reimplemented the same logging shape.
+fleet-logging is a Python library that gives every service in a home lab one JSON log format and one config loader. Before it existed, several services each wrote their own copy of the same logging code, and the copies drifted apart.
 
-[![CI](https://github.com/preston-bernstein/fleet-logging/actions/workflows/ci.yml/badge.svg)](https://github.com/preston-bernstein/fleet-logging/actions/workflows/ci.yml)  [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776ab)](pyproject.toml)  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+It is a library, not a service. A consumer imports it. It has two parts: logging (`configure_logging`, `log_event`, `new_run_id`) and config (`load_config`).
 
-## Library, not a service
+## Every log line is one JSON object
 
-fleet-logging is a library, not a running service — a consumer *imports* it
-directly.
-
-## The JSON log line contract
-
-Every log line this library emits is a single-line JSON object with these
-fields:
+These fields appear on every line:
 
 | Field | Meaning |
 |---|---|
-| `schema_version` | Integer, currently `1`. Bump when the shape changes. |
-| `ts` | UTC timestamp, `%Y-%m-%dT%H:%M:%SZ`. |
-| `level` | The caller's own native spelling — `debug`/`info`/`warn`/`error`/`critical` for `log_event()`, or Python's `DEBUG`/`INFO`/... for stdlib `logging`. This library never canonicalizes it; that's left to whatever ingests the logs downstream. |
-| `service` | The service name passed to `configure_logging()` / `log_event()`. |
-| `event` | A short, stable, dot-namespaced string (`batch.completed`, `run.failed`) — the thing a dashboard panel or an alert actually filters on. |
-| `msg` | Human-readable prose for a person reading the log — never what anything alerts on. |
-| *(extra fields)* | Anything else the caller passes — `run_id`, `outcome`, `items_processed`, `err_type`, `err_msg`, `duration_ms`, etc. |
+| `schema_version` | Integer, now `1`. Raise it when the shape changes. |
+| `ts` | UTC time, format `%Y-%m-%dT%H:%M:%SZ`. |
+| `level` | The caller's own spelling. `log_event()` takes `debug`, `info`, `warn`, `error`, `critical`. stdlib `logging` gives `DEBUG`, `INFO`, and so on. The library never changes it. |
+| `service` | The name you pass to `configure_logging()` or `log_event()`. |
+| `event` | A short, stable, dot-separated name such as `batch.completed`. Dashboards and alerts filter on it. |
+| `msg` | Text for a person. Never alert on it. |
 
-On an exception (`exc_info` set), `err_type` is filled in automatically if
-the caller didn't already supply one.
+Any extra field you pass, such as `run_id` or `items_processed`, is added to the line. If a log call carries an exception and you gave no `err_type`, the library sets `err_type` to the exception class name.
 
-### Redaction
+## Log from a service
 
-Both `configure_logging()`/`log_event()` redact known secret-shaped field
-names before a line is emitted, as defense-in-depth on top of whatever the
-log pipeline downstream does. Deny-listed keys (case-insensitive match):
+Use stdlib `logging` in a long-running process. Call `configure_logging` once, in the entry point only.
+
+```python
+import logging
+from fleet_logging import configure_logging
+
+configure_logging("my-service")
+log = logging.getLogger(__name__)
+log.info(
+    "batch complete",
+    extra={"event": "batch.completed", "run_id": run_id, "outcome": "ok", "items_processed": 42},
+)
+```
+
+Use `log_event` in a short CLI run that has nothing to configure.
+
+```python
+from fleet_logging import log_event, new_run_id
+
+run_id = new_run_id()
+log_event(
+    "info", "batch.completed", service="my-service", run_id=run_id, outcome="ok", items_processed=42
+)
+```
+
+Both write to stdout by default. Pass `stream=sys.stderr` to change that.
+
+Library modules must not call `configure_logging()`, set handlers, or call `basicConfig`. They call `logging.getLogger(__name__)` or `log_event()`. This stops two libraries from fighting over the root logger.
+
+`new_run_id()` returns `$RUN_ID` if it is set. Otherwise it returns an id like `run-20261114T120000Z-1a2b3c4d`. A shell script can set `RUN_ID` so its Python child shares the id.
+
+## Secret fields are redacted
+
+The library replaces the value with `[REDACTED]` for these keys, matched without regard to case:
 
 ```
 password, passwd, token, api_key, apikey, secret, authorization,
 access_token, refresh_token, ssn, cookie, session
 ```
 
-A matching key's value is replaced with `[REDACTED]`. Independently, any
-string value that parses as a URL with a query string has the query string
-stripped — query strings carry API keys and session tokens far more often
-than path segments do.
+It also removes the query string from any string value that is a URL. Query strings often hold API keys.
 
-Residual gap, stated rather than hidden: a secret value logged under an
-unlisted or misspelled key name still reaches the log line. This closes the
-common case, not every case.
+A secret under any other key name still reaches the log. Redaction here is a second layer. The log pipeline should redact too.
 
-### Library-vs-application rule
-
-Only an application's own entry point calls `configure_logging()`. Every
-importable module should use `logging.getLogger(__name__)` (or call
-`log_event()` directly) and never touch a handler, formatter, or
-`basicConfig` itself — that's what keeps two libraries from fighting over
-who owns the root logger's output.
-
-## What it replaces
-
-Extracted from, and a strict superset of, several internal Python services
-that had each independently hand-rolled the same JSON logging shape — one
-as a `logging.Formatter` subclass with an idempotent `configure_logging()`,
-another as a standalone `log_event()` function with no `logging` module
-dependency plus its own field redaction — and two independently hand-rolled
-yaml+env config loaders with slightly different missing-file behavior (see
-"Config loading" below).
-
-## Using it
-
-**stdlib `logging`-based** (an application with a long-lived process):
-
-```python
-import logging
-from fleet_logging import configure_logging
-
-configure_logging("my-service")  # call once, at the entry point only
-log = logging.getLogger(__name__)
-log.info("batch complete", extra={"event": "batch.completed", "run_id": run_id,
-                                   "outcome": "ok", "items_processed": 42})
-```
-
-**Direct function call** (a oneshot CLI invocation with no long-lived
-process to configure):
-
-```python
-from fleet_logging import log_event, new_run_id
-
-run_id = new_run_id()
-log_event("info", "batch.completed", service="my-service", run_id=run_id,
-           outcome="ok", items_processed=42)
-```
-
-**Config loading**:
+## Load config from yaml and env
 
 ```python
 from dataclasses import dataclass, field
 from fleet_logging import load_config
+
 
 @dataclass
 class Config:
@@ -107,66 +78,54 @@ class Config:
     review_min_days: int = 7
     symbol_universe: list[str] = field(default_factory=list)
 
-cfg = load_config(Config, "config.yaml")  # yaml -> env override -> field default
+
+cfg = load_config(Config, "config.yaml")
 ```
 
-`load_config()` overlays, highest precedence first: an environment variable
-(`{env_prefix}{FIELD}`, uppercased) > a value from the yaml file > the
-dataclass field's own default. Pass `required=True` if a missing yaml file
-should be fatal (`FileNotFoundError`) instead of falling back to
-defaults/env with a logged warning.
+Precedence, highest first:
 
-## Adding it as a dependency
+1. Environment variable `{env_prefix}{FIELD}`, in upper case. `env_prefix` defaults to an empty string.
+2. Value in the yaml file.
+3. Default on the dataclass field.
 
-Pinned to an exact commit — a floating branch/tag ref is deliberately
-avoided so a consumer never picks up an untested change:
+Details:
+
+- The loader reads a `.env` file first, so its values count as environment variables. Pass `dotenv_path` to choose the file.
+- Env values are cast to the field type: `bool`, `int`, `float`, or `list` (comma separated). A bad value raises `ConfigError`.
+- A field with no default and no value raises `ConfigError`.
+- A missing yaml file logs a `config.missing` warning and uses defaults. Pass `required=True` to raise `FileNotFoundError` instead.
+- A yaml file that fails to parse always raises.
+
+## Add it to a project
+
+Pin an exact commit. A branch or tag could pull in an untested change.
 
 ```toml
 dependencies = [
-    "fleet-logging @ git+ssh://git@github.com/preston-bernstein/fleet-logging.git@40b6e439d453d40e407baba5959631caf60f5e7b",
+    "fleet-logging @ git+ssh://git@github.com/preston-bernstein/fleet-logging.git@<commit-sha>",
 ]
 ```
 
-Bump the pin by hand when a consumer wants a newer commit — no package
-registry, solo-maintainer workflow.
+Change the pin by hand when you want a newer commit. There is no package registry.
 
-## Stack
+## Set up for development
 
-| Layer | Tech |
-|---|---|
-| Language | Python 3.11+ |
-| Build | Hatchling |
-| Tests | pytest 8+ |
-| Lint | ruff |
-| Config parsing | PyYAML, python-dotenv |
+1. Run `git clone git@github.com:preston-bernstein/fleet-logging.git`.
+2. Run `cd fleet-logging`.
+3. Run `uv sync`.
+4. Run `bash scripts/install-gate-tools.sh`, then run the `export PATH=...` line it prints.
+5. Run `git config core.hooksPath .githooks`.
+6. Run `bash scripts/py-validate.sh`.
 
-## Project layout
+The hook and CI run four gates: `core-validate.sh`, `gha-validate.sh`, `py-validate.sh` and `writing-validate.sh`, all in `scripts/`.
 
-```
-src/fleet_logging/
-├── __init__.py       # public re-exports
-├── formatter.py       # JsonFormatter, configure_logging, log_event, new_run_id
-├── redact.py           # deny-list + redact_fields()
-└── config.py            # load_config(dataclass_type, path)
-tests/                    # one test module per source module
-```
+It needs Python 3.11 or newer. Dependencies are PyYAML and python-dotenv.
 
-## Quick start
+## Where things live
 
-```bash
-git clone git@github.com:preston-bernstein/fleet-logging.git
-cd fleet-logging
-pip install -e ".[test,dev]"
-pytest
-```
+- `src/fleet_logging/formatter.py`: `JsonFormatter`, `configure_logging`, `log_event`, `new_run_id`.
+- `src/fleet_logging/redact.py`: the deny-list and `redact_fields()`.
+- `src/fleet_logging/config.py`: `load_config` and `ConfigError`.
+- `tests/`: tests for the formatter and the config loader.
 
-## Environment variables
-
-This library reads no environment variables of its own. `python-dotenv` is
-a dependency of `load_config()` only, so that a `.env` file's values (if a
-*consumer* has one) participate in the same env-override precedence as any
-other environment variable — see `.env.example`.
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+License: MIT. See [LICENSE](LICENSE).

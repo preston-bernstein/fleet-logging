@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   ci:
-    uses: preston-bernstein/ci-workflows/.github/workflows/python.yml@v1
+    uses: preston-bernstein/ci-workflows/.github/workflows/python.yml@980585f4e9c3c1ef982cb934e153f925121fe0c0 # v1
     with:
       python-versions: '["3.11"]'
       install: pip install -e ".[test,dev]"
@@ -24,4 +24,27 @@ jobs:
       test: pytest
 
   workflows:
-    uses: preston-bernstein/ci-workflows/.github/workflows/actions-lint.yml@v1
+    uses: preston-bernstein/ci-workflows/.github/workflows/actions-lint.yml@980585f4e9c3c1ef982cb934e153f925121fe0c0 # v1
+
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # the writing gate diffs against main
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.13.8"
+          enable-cache: false
+      - name: Install the pinned gate tools
+        run: bash scripts/install-gate-tools.sh
+      - name: Core gate
+        run: bash scripts/core-validate.sh
+      - name: Workflow gate
+        run: bash scripts/gha-validate.sh
+      - name: Python gate
+        run: bash scripts/py-validate.sh
+      - name: Writing gate
+        run: bash scripts/writing-validate.sh

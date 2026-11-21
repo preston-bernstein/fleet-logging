@@ -1,0 +1,21 @@
+{
+ "_reason": "Both functions only exceed the 4-parameter limit. Their signatures are the public API; changing them is a design decision.",
+ "functions": {
+  "src/fleet_logging/config.py::load_config": {
+   "token": 115,
+   "length": 32,
+   "nd": 0,
+   "param": 6,
+   "nloc": 14,
+   "ccn": 3
+  },
+  "src/fleet_logging/formatter.py::log_event": {
+   "token": 125,
+   "length": 36,
+   "nd": 0,
+   "param": 6,
+   "nloc": 20,
+   "ccn": 3
+  }
+ }
+}

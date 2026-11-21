@@ -29,10 +29,12 @@ without dropping behavior.
 from __future__ import annotations
 
 import os
+import types
 import typing
+from collections.abc import Callable
 from dataclasses import MISSING, fields, is_dataclass
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import yaml
 from dotenv import load_dotenv
@@ -55,31 +57,51 @@ def _unwrap_optional(annotation: object) -> object:
     """`int | None` / `Optional[int]` -> `int`. Leaves everything else
     unchanged, including plain `list`/`list[str]`."""
     origin = typing.get_origin(annotation)
-    if origin is typing.Union:
+    if origin is typing.Union or origin is types.UnionType:
         args = [a for a in typing.get_args(annotation) if a is not type(None)]
         if len(args) == 1:
             return args[0]
     return annotation
 
 
+def _parse_bool(raw: str) -> bool:
+    lowered = raw.strip().lower()
+    if lowered in _TRUE_STRINGS:
+        return True
+    if lowered in _FALSE_STRINGS:
+        return False
+    raise ValueError(f"{raw!r} is not a recognized boolean")
+
+
+def _split_list(raw: str) -> list[str]:
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _identity(raw: str) -> str:
+    return raw
+
+
+# Add a supported field type by adding a row here.
+_CONVERTERS: dict[object, Callable[[str], object]] = {
+    bool: _parse_bool,
+    int: int,
+    float: float,
+    list: _split_list,
+}
+
+
+def _converter_for(annotation: object) -> Callable[[str], object]:
+    key = typing.get_origin(annotation) or annotation
+    try:
+        return _CONVERTERS.get(key, _identity)
+    except TypeError:  # an unhashable annotation has no converter
+        return _identity
+
+
 def _coerce(raw: str, annotation: object, field_name: str) -> object:
     annotation = _unwrap_optional(annotation)
     try:
-        if annotation is bool:
-            low = raw.strip().lower()
-            if low in _TRUE_STRINGS:
-                return True
-            if low in _FALSE_STRINGS:
-                return False
-            raise ValueError(f"{raw!r} is not a recognized boolean")
-        if annotation is int:
-            return int(raw)
-        if annotation is float:
-            return float(raw)
-        origin = typing.get_origin(annotation)
-        if annotation is list or origin is list:
-            return [item.strip() for item in raw.split(",") if item.strip()]
-        return raw
+        return _converter_for(annotation)(raw)
     except ValueError as exc:
         raise ConfigError(
             f"env override for field {field_name!r} ({raw!r}) could not be "
@@ -87,13 +109,69 @@ def _coerce(raw: str, annotation: object, field_name: str) -> object:
         ) from exc
 
 
+def _read_yaml(path: str | os.PathLike[str] | None, required: bool, service: str) -> dict[str, Any]:
+    """Return the yaml mapping, or `{}` when there is no file to read."""
+    if path is None:
+        return {}
+    cfg_path = Path(path)
+    if not cfg_path.exists():
+        return _handle_missing_file(cfg_path, required, service)
+    try:
+        return yaml.safe_load(cfg_path.read_text()) or {}
+    except yaml.YAMLError as exc:
+        log_event(
+            "error",
+            "config.parse_failed",
+            service=service,
+            path=str(cfg_path.resolve()),
+            err_type=type(exc).__name__,
+            err_msg=str(exc),
+        )
+        raise
+
+
+def _handle_missing_file(cfg_path: Path, required: bool, service: str) -> dict[str, Any]:
+    if required:
+        raise FileNotFoundError(f"{cfg_path} missing and required=True was passed to load_config()")
+    log_event(
+        "warn",
+        "config.missing",
+        "config file not found, falling back to defaults/env",
+        service=service,
+        path=str(cfg_path.resolve()),
+    )
+    return {}
+
+
+def _field_overrides(
+    dataclass_type: type[Any],
+    yaml_values: dict[str, Any],
+    env_prefix: str,
+    path: str | os.PathLike[str] | None,
+) -> dict[str, Any]:
+    type_hints = typing.get_type_hints(dataclass_type)
+    kwargs: dict[str, Any] = {}
+    for f in fields(dataclass_type):
+        env_key = f"{env_prefix}{f.name}".upper()
+        if env_key in os.environ:
+            kwargs[f.name] = _coerce(os.environ[env_key], type_hints.get(f.name, str), f.name)
+        elif f.name in yaml_values and yaml_values[f.name] is not None:
+            kwargs[f.name] = yaml_values[f.name]
+        elif f.default is MISSING and f.default_factory is MISSING:
+            raise ConfigError(
+                f"field {f.name!r} has no default and was not present in "
+                f"{path!r} or the environment"
+            )
+    return kwargs
+
+
 def load_config(
     dataclass_type: type[T],
-    path: str | os.PathLike | None = None,
+    path: str | os.PathLike[str] | None = None,
     *,
     required: bool = False,
     env_prefix: str = "",
-    dotenv_path: str | os.PathLike | None = None,
+    dotenv_path: str | os.PathLike[str] | None = None,
     service: str = "fleet-logging",
 ) -> T:
     """Load a flat dataclass config from a yaml file overlaid with
@@ -117,46 +195,5 @@ def load_config(
 
     load_dotenv(dotenv_path) if dotenv_path else load_dotenv()
 
-    data: dict = {}
-    if path is not None:
-        cfg_path = Path(path)
-        if cfg_path.exists():
-            try:
-                data = yaml.safe_load(cfg_path.read_text()) or {}
-            except yaml.YAMLError as exc:
-                log_event(
-                    "error",
-                    "config.parse_failed",
-                    service=service,
-                    path=str(cfg_path.resolve()),
-                    err_type=type(exc).__name__,
-                    err_msg=str(exc),
-                )
-                raise
-        elif required:
-            raise FileNotFoundError(
-                f"{cfg_path} missing and required=True was passed to load_config()"
-            )
-        else:
-            log_event(
-                "warn",
-                "config.missing",
-                "config file not found, falling back to defaults/env",
-                service=service,
-                path=str(cfg_path.resolve()),
-            )
-
-    type_hints = typing.get_type_hints(dataclass_type)
-    kwargs: dict = {}
-    for f in fields(dataclass_type):
-        env_key = f"{env_prefix}{f.name}".upper()
-        if env_key in os.environ:
-            kwargs[f.name] = _coerce(os.environ[env_key], type_hints.get(f.name, str), f.name)
-        elif f.name in data and data[f.name] is not None:
-            kwargs[f.name] = data[f.name]
-        elif f.default is MISSING and f.default_factory is MISSING:  # type: ignore[misc]
-            raise ConfigError(
-                f"field {f.name!r} has no default and was not present in "
-                f"{path!r} or the environment"
-            )
-    return dataclass_type(**kwargs)
+    yaml_values = _read_yaml(path, required, service)
+    return dataclass_type(**_field_overrides(dataclass_type, yaml_values, env_prefix, path))
