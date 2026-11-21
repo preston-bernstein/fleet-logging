@@ -33,8 +33,9 @@ ln -sf "$TOOLS/node_modules/.bin/jscpd" "$TOOLS/bin/jscpd"
 
 # fetch_release URL SHA256 MEMBER: download, verify, then unpack MEMBER into the bin directory.
 fetch_release() {
-  local url="$1" sha="$2" member="$3" tmp
-  tmp="$(mktemp -d)"
+  local url="$1" sha="$2" member="$3"
+  tmp="$(mktemp -d)" # global, not local: the EXIT trap runs after this function returns
+  trap 'rm -rf "$tmp"' EXIT
   curl -fsSL "$url" -o "$tmp/release.tar.gz"
   echo "$sha  $tmp/release.tar.gz" | sha256sum -c --quiet - || fail "checksum mismatch for $url"
   tar -xzf "$tmp/release.tar.gz" -C "$TOOLS/bin" "$member"
