@@ -15,7 +15,10 @@ VALE_SHA256=c80d62f6bce87b81843ac5b512a26e63213927b957adba0a64fc594570da2000
 ACTIONLINT_VERSION=1.7.12
 ACTIONLINT_SHA256=8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
 
-fail() { echo "install-gate-tools: $*" >&2; exit 1; }
+fail() {
+  echo "install-gate-tools: $*" >&2
+  exit 1
+}
 for tool in uv npm curl tar sha256sum; do
   command -v "$tool" >/dev/null 2>&1 || fail "missing tool: $tool"
 done
@@ -47,4 +50,4 @@ fetch_release "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLI
   "$ACTIONLINT_SHA256" actionlint
 
 echo "install-gate-tools: done. Run: export PATH=\"$TOOLS/bin:\$PATH\""
-if [ -n "${GITHUB_PATH:-}" ]; then echo "$TOOLS/bin" >> "$GITHUB_PATH"; fi
+if [ -n "${GITHUB_PATH:-}" ]; then echo "$TOOLS/bin" >>"$GITHUB_PATH"; fi
